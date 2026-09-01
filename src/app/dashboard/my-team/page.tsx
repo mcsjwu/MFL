@@ -39,11 +39,19 @@ export default async function MyTeamPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">{franchise?.name ?? "My Team"}</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          {sortedPlayers.length} player{sortedPlayers.length === 1 ? "" : "s"} on roster
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">{franchise?.name ?? "My Team"}</h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            {sortedPlayers.length} player{sortedPlayers.length === 1 ? "" : "s"} on roster
+          </p>
+        </div>
+        <Link
+          href="/dashboard/lineup"
+          className="rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 transition-colors"
+        >
+          Set Lineup
+        </Link>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">

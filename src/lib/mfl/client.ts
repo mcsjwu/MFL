@@ -82,6 +82,52 @@ export async function mflExport<T = unknown>(
   return data as T;
 }
 
+interface MflImportOptions {
+  /** "NAME=VALUE" cookie string. Required — import requests can't use APIKEY. */
+  cookie: string;
+  year?: string;
+  params?: Record<string, string | number | undefined>;
+}
+
+/**
+ * Calls the MFL import API (write operations) for the configured league.
+ * Unlike export, import requests require the owner's actual session cookie —
+ * MFL's docs say the APIKEY shortcut does not work for imports.
+ */
+export async function mflImport<T = unknown>(
+  type: string,
+  options: MflImportOptions
+): Promise<T> {
+  const year = options.year ?? MFL_YEAR;
+  const search = new URLSearchParams({ TYPE: type, JSON: "1", L: MFL_LEAGUE_ID });
+
+  if (options.params) {
+    for (const [key, value] of Object.entries(options.params)) {
+      if (value !== undefined) search.set(key, String(value));
+    }
+  }
+
+  const url = `https://${MFL_API_HOST}/${year}/import?${search.toString()}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Cookie: options.cookie },
+    redirect: "follow",
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new MflApiError(`MFL import ${type} failed with HTTP ${res.status}`);
+  }
+
+  const data = (await res.json()) as Record<string, unknown>;
+  if (data.error) {
+    const err = data.error;
+    const message = typeof err === "string" ? err : (err as { $t?: string }).$t ?? "MFL API error";
+    throw new MflApiError(message);
+  }
+
+  return data as T;
+}
+
 export interface MflPlayer {
   id: string;
   name: string;

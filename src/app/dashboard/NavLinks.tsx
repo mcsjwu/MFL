@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/dashboard/standings", label: "Standings" },
   { href: "/dashboard/scores", label: "Scores" },
   { href: "/dashboard/my-team", label: "My Team" },
+  { href: "/dashboard/lineup", label: "Set Lineup" },
   { href: "/dashboard/rosters", label: "Rosters" },
   { href: "/dashboard/schedule", label: "Schedule" },
   { href: "/dashboard/draft", label: "Draft" },

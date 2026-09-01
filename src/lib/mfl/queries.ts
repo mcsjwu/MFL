@@ -13,6 +13,12 @@ export interface MflFranchise {
   division?: string;
 }
 
+export interface MflStarterPosition {
+  name: string;
+  /** e.g. "1-2" meaning 1 to 2 starters of this position */
+  limit: string;
+}
+
 export interface MflLeagueInfo {
   name: string;
   rosterSize?: string;
@@ -20,6 +26,8 @@ export interface MflLeagueInfo {
   endWeek?: string;
   lastRegularSeasonWeek?: string;
   franchises: MflFranchise[];
+  starterCount?: string;
+  starterPositions: MflStarterPosition[];
 }
 
 export async function getLeague(opts: WithCookie = {}): Promise<MflLeagueInfo | null> {
@@ -32,6 +40,7 @@ export async function getLeague(opts: WithCookie = {}): Promise<MflLeagueInfo | 
         endWeek?: string;
         lastRegularSeasonWeek?: string;
         franchises?: { franchise?: MflFranchise | MflFranchise[] };
+        starters?: { count?: string; position?: MflStarterPosition | MflStarterPosition[] };
       };
     }>("league", { cookie: opts.cookie });
     const league = data.league;
@@ -43,6 +52,8 @@ export async function getLeague(opts: WithCookie = {}): Promise<MflLeagueInfo | 
       endWeek: league.endWeek,
       lastRegularSeasonWeek: league.lastRegularSeasonWeek,
       franchises: toArray(league.franchises?.franchise),
+      starterCount: league.starters?.count,
+      starterPositions: toArray(league.starters?.position),
     };
   } catch {
     return null;
@@ -172,11 +183,14 @@ export async function getRosters(opts: WithCookie = {}): Promise<MflFranchiseRos
 
 export async function getFranchiseRoster(
   franchiseId: string,
-  opts: WithCookie = {}
+  opts: WithCookie & { week?: number } = {}
 ): Promise<MflFranchiseRoster | null> {
   const data = await mflExport<{
     rosters?: { franchise?: { id: string; player?: MflRosterPlayer | MflRosterPlayer[] } | { id: string; player?: MflRosterPlayer | MflRosterPlayer[] }[] };
-  }>("rosters", { params: { FRANCHISE: franchiseId }, cookie: opts.cookie });
+  }>("rosters", {
+    params: { FRANCHISE: franchiseId, W: opts.week },
+    cookie: opts.cookie,
+  });
   const franchises = toArray(data.rosters?.franchise);
   const f = franchises.find((x) => x.id === franchiseId) ?? franchises[0];
   if (!f) return null;
