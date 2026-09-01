@@ -34,6 +34,34 @@ export async function mflLogin(
   throw new MflAuthError(errorMatch?.[1]?.trim() || "Login failed");
 }
 
+/**
+ * Parses an MFL export/import response body. Despite JSON=1, MFL sometimes
+ * returns a plain XML `<error>...</error>` body anyway (e.g. auth failures) —
+ * so fall back to scraping that out rather than letting JSON.parse blow up
+ * and mask the real error behind a generic failure.
+ */
+async function parseMflResponse<T>(res: Response, label: string): Promise<T> {
+  if (!res.ok) {
+    throw new MflApiError(`MFL ${label} failed with HTTP ${res.status}`);
+  }
+
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text) as Record<string, unknown>;
+    if (data.error) {
+      const err = data.error;
+      const message =
+        typeof err === "string" ? err : (err as { $t?: string }).$t ?? "MFL API error";
+      throw new MflApiError(message);
+    }
+    return data as T;
+  } catch (err) {
+    if (err instanceof MflApiError) throw err;
+    const errorMatch = text.match(/<error>([^<]*)<\/error>/i);
+    throw new MflApiError(errorMatch?.[1]?.trim() || `MFL ${label} returned an unexpected response`);
+  }
+}
+
 interface MflExportOptions {
   /** "NAME=VALUE" cookie string, e.g. from getMflSessionCookie() */
   cookie?: string;
@@ -68,18 +96,7 @@ export async function mflExport<T = unknown>(
   if (options.cookie) headers["Cookie"] = options.cookie;
 
   const res = await fetch(url, { headers, redirect: "follow", cache: "no-store" });
-  if (!res.ok) {
-    throw new MflApiError(`MFL export ${type} failed with HTTP ${res.status}`);
-  }
-
-  const data = (await res.json()) as Record<string, unknown>;
-  if (data.error) {
-    const err = data.error;
-    const message = typeof err === "string" ? err : (err as { $t?: string }).$t ?? "MFL API error";
-    throw new MflApiError(message);
-  }
-
-  return data as T;
+  return parseMflResponse<T>(res, `export ${type}`);
 }
 
 interface MflImportOptions {
@@ -114,18 +131,7 @@ export async function mflImport<T = unknown>(
     redirect: "follow",
     cache: "no-store",
   });
-  if (!res.ok) {
-    throw new MflApiError(`MFL import ${type} failed with HTTP ${res.status}`);
-  }
-
-  const data = (await res.json()) as Record<string, unknown>;
-  if (data.error) {
-    const err = data.error;
-    const message = typeof err === "string" ? err : (err as { $t?: string }).$t ?? "MFL API error";
-    throw new MflApiError(message);
-  }
-
-  return data as T;
+  return parseMflResponse<T>(res, `import ${type}`);
 }
 
 export interface MflPlayer {
