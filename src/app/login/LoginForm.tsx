@@ -22,61 +22,62 @@ export default function LoginForm() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Login failed");
+        setError(data.error ?? "Couldn't sign in");
         return;
       }
       router.push("/dashboard");
       router.refresh();
     } catch {
-      setError("Network error, please try again");
+      setError("Couldn't reach MyFantasyLeague. Try again.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full max-w-sm">
-      <div className="flex flex-col gap-1">
-        <label htmlFor="username" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-          MFL Username
+    <form onSubmit={handleSubmit} className="mfl-card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+      <div className="mfl-field">
+        <label htmlFor="username" className="mfl-eyebrow">
+          Username
         </label>
         <input
           id="username"
           name="username"
           type="text"
+          className="mfl-input"
           autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
           required
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="password" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-          MFL Password
+      <div className="mfl-field">
+        <label htmlFor="password" className="mfl-eyebrow">
+          Password
         </label>
         <input
           id="password"
           name="password"
           type="password"
+          className="mfl-input"
           autoComplete="current-password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <button
-        type="submit"
-        disabled={loading}
-        className="rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium py-2 transition-colors"
-      >
-        {loading ? "Signing in…" : "Sign in"}
+      {error && (
+        <p role="alert" className="mfl-note mfl-note--error">
+          {error}
+        </p>
+      )}
+      <button type="submit" className="mfl-btn mfl-btn--accent mfl-btn--block" disabled={loading}>
+        {loading ? "Signing in" : "Sign in"}
       </button>
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Your credentials are sent directly to MyFantasyLeague.com to obtain a session token; they
-        are never stored by this app.
+      <p className="mfl-caption" style={{ margin: 0 }}>
+        Your login goes straight to MyFantasyLeague. This app never stores your password.
       </p>
     </form>
   );

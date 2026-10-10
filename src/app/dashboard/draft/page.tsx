@@ -1,58 +1,53 @@
+import PageHeader from "@/components/mfl/PageHeader";
+import PlayerRow from "@/components/mfl/PlayerRow";
 import { resolvePlayers } from "@/lib/mfl/client";
+import { displayName, normalizePosition } from "@/lib/mfl/present";
 import { getDraftResults, getFranchiseMap } from "@/lib/mfl/queries";
 import { getMflSessionCookie } from "@/lib/mfl/session";
 
 export default async function DraftPage() {
   const cookie = await getMflSessionCookie();
-  const [franchises, picks] = await Promise.all([
-    getFranchiseMap({ cookie }),
-    getDraftResults({ cookie }),
-  ]);
+  const [franchises, picks] = await Promise.all([getFranchiseMap({ cookie }), getDraftResults({ cookie })]);
   const players = await resolvePlayers(picks.map((p) => p.player));
 
-  const rounds = new Map<string, typeof picks>();
+  const rounds = new Map<number, typeof picks>();
   for (const pick of picks) {
-    const list = rounds.get(pick.round) ?? [];
-    list.push(pick);
-    rounds.set(pick.round, list);
+    const round = parseInt(pick.round, 10);
+    rounds.set(round, [...(rounds.get(round) ?? []), pick]);
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <h1 className="text-2xl font-semibold">Draft Results</h1>
+    <>
+      <PageHeader title="Draft" sub={picks.length > 0 ? `${picks.length} picks` : undefined} />
 
       {[...rounds.entries()].map(([round, roundPicks]) => (
-        <section key={round} className="flex flex-col gap-3">
-          <h2 className="text-lg font-medium">Round {round}</h2>
-          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full text-sm">
-              <thead className="bg-neutral-100 dark:bg-neutral-900 text-left">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Pick</th>
-                  <th className="px-3 py-2 font-medium">Team</th>
-                  <th className="px-3 py-2 font-medium">Player</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roundPicks.map((pick) => (
-                  <tr
-                    key={`${pick.round}-${pick.pick}`}
-                    className="border-t border-neutral-200 dark:border-neutral-800"
-                  >
-                    <td className="px-3 py-2 text-neutral-500">{pick.pick}</td>
-                    <td className="px-3 py-2">{franchises.get(pick.franchise)?.name ?? pick.franchise}</td>
-                    <td className="px-3 py-2">
-                      {players.get(pick.player)?.name ?? `Player #${pick.player}`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <div key={round} className="mfl-card">
+          <h2 className="mfl-card__head">Round {round}</h2>
+          <ul className="mfl-players">
+            {roundPicks.map((pick) => {
+              const info = players.get(pick.player);
+              return (
+                <PlayerRow
+                  key={`${pick.round}-${pick.pick}`}
+                  player={{
+                    id: pick.player,
+                    name: displayName(info?.name, `Player #${pick.player}`),
+                    position: normalizePosition(info?.position),
+                    sub: franchises.get(pick.franchise)?.name?.trim() ?? pick.franchise,
+                    pts: `${round}.${pick.pick}`,
+                  }}
+                />
+              );
+            })}
+          </ul>
+        </div>
       ))}
 
-      {picks.length === 0 && <p className="text-sm text-neutral-500">No draft results available yet.</p>}
-    </div>
+      {picks.length === 0 && (
+        <div className="mfl-card">
+          <p className="mfl-empty">No draft results yet.</p>
+        </div>
+      )}
+    </>
   );
 }

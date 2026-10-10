@@ -1,22 +1,27 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Icon from "@/components/mfl/Icon";
+import PositionBadge from "@/components/mfl/PositionBadge";
 
-interface RosterPlayer {
+interface Player {
   id: string;
   name: string;
   position: string;
-  team: string;
+  sub: string;
+  badge?: { label: string; tone: "q" | "out" } | null;
+  proj?: string;
 }
 
 interface StarterPosition {
   name: string;
+  /** e.g. "1-2": between 1 and 2 starters at this position */
   limit: string;
 }
 
 interface Props {
   week: number;
-  players: RosterPlayer[];
+  players: Player[];
   starterCount?: string;
   starterPositions: StarterPosition[];
   initialStarters: string[];
@@ -27,33 +32,48 @@ function parseLimit(limit: string): { min: number; max: number } {
   return { min: min || 0, max: max ?? min ?? 0 };
 }
 
-export default function LineupEditor({
-  week,
-  players,
-  starterCount,
-  starterPositions,
-  initialStarters,
-}: Props) {
+const normalize = (pos: string) => (pos.toUpperCase() === "PK" ? "K" : pos.toUpperCase());
+const range = (min: number, max: number) => (min === max ? `${min}` : `${min}–${max}`);
+
+export default function LineupEditor({ week, players, starterCount, starterPositions, initialStarters }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set(initialStarters));
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
-    null
+  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
+  const rules = useMemo(
+    () =>
+      starterPositions.map((p) => ({ name: normalize(p.name), ...parseLimit(p.limit) })),
+    [starterPositions]
   );
 
-  const playersByPosition = useMemo(() => {
-    const map = new Map<string, RosterPlayer[]>();
-    for (const p of players) {
-      const list = map.get(p.position) ?? [];
-      list.push(p);
-      map.set(p.position, list);
-    }
-    return map;
-  }, [players]);
+  // Groups follow the league's starting positions, then anything else on the roster.
+  const groups = useMemo(() => {
+    const named = new Set(rules.map((r) => r.name));
+    const out = rules.map((r) => ({ title: r.name, rule: r, players: players.filter((p) => p.position === r.name) }));
+    const other = players.filter((p) => !named.has(p.position));
+    if (other.length > 0) out.push({ title: "Other", rule: undefined as never, players: other });
+    return out;
+  }, [rules, players]);
 
-  const namedPositions = new Set(starterPositions.map((p) => p.name));
-  const otherPlayers = players.filter((p) => !namedPositions.has(p.position));
+  const required = starterCount ? parseInt(starterCount, 10) : undefined;
+
+  const counts = rules.map((r) => {
+    const count = players.filter((p) => p.position === r.name && selected.has(p.id)).length;
+    return { ...r, count, ok: count >= r.min && count <= r.max };
+  });
+
+  // The first thing standing between the manager and a valid lineup, in words.
+  let problem: string | null = null;
+  if (required !== undefined && selected.size < required) problem = `Pick ${required - selected.size} more`;
+  else if (required !== undefined && selected.size > required) problem = `Remove ${selected.size - required}`;
+  else {
+    const bad = counts.find((c) => !c.ok);
+    if (bad) problem = bad.count < bad.min ? `Add ${bad.min - bad.count} ${bad.name}` : `Remove ${bad.count - bad.max} ${bad.name}`;
+  }
+  const canSave = problem === null && !saving;
 
   function toggle(id: string) {
+    setMessage(null);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -62,18 +82,7 @@ export default function LineupEditor({
     });
   }
 
-  const requiredTotal = starterCount ? parseInt(starterCount, 10) : undefined;
-  const totalOk = requiredTotal === undefined || selected.size === requiredTotal;
-
-  const positionCounts = starterPositions.map((pos) => {
-    const count = (playersByPosition.get(pos.name) ?? []).filter((p) => selected.has(p.id)).length;
-    const { min, max } = parseLimit(pos.limit);
-    return { ...pos, count, min, max, ok: count >= min && count <= max };
-  });
-  const allPositionsOk = positionCounts.every((p) => p.ok);
-  const canSubmit = totalOk && allPositionsOk && !saving;
-
-  async function handleSubmit() {
+  async function save() {
     setSaving(true);
     setMessage(null);
     try {
@@ -82,113 +91,96 @@ export default function LineupEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ week, starters: [...selected] }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage({ type: "error", text: data.error ?? "Failed to submit lineup" });
+        setMessage({ kind: "error", text: data.error ?? "Couldn't save the lineup" });
         return;
       }
-      setMessage({ type: "success", text: `Lineup saved for week ${week}.` });
+      setMessage({ kind: "ok", text: `Lineup saved for week ${week}` });
     } catch {
-      setMessage({ type: "error", text: "Network error, please try again" });
+      setMessage({ kind: "error", text: "Couldn't reach MyFantasyLeague. Try again." });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap gap-3 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 text-sm">
-        <span
-          className={`font-medium ${totalOk ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}
-        >
-          Starters: {selected.size}
-          {requiredTotal !== undefined ? ` / ${requiredTotal}` : ""}
-        </span>
-        {positionCounts.map((p) => (
-          <span
-            key={p.name}
-            className={p.ok ? "text-neutral-500" : "text-amber-600 dark:text-amber-400 font-medium"}
-          >
-            {p.name}: {p.count} ({p.min}-{p.max})
+    <>
+      <div className="mfl-card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "var(--space-3)" }}>
+          <span className="mfl-eyebrow">Starters</span>
+          <span className="mfl-stat" aria-live="polite">
+            {selected.size}
+            {required !== undefined ? ` / ${required}` : ""}
           </span>
-        ))}
+        </div>
+        <ul className="mfl-tiles" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {counts.map((c) => (
+            <li key={c.name} className="mfl-tile">
+              <span className="mfl-eyebrow">
+                {c.name} · {range(c.min, c.max)}
+              </span>
+              <span className="mfl-stat">
+                {c.count}
+                {!c.ok && <span className="mfl-badge mfl-badge--q" style={{ marginLeft: "var(--space-2)", verticalAlign: "middle" }}>{c.count < c.min ? "Need more" : "Too many"}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
 
-      {starterPositions.map((pos) => (
-        <section key={pos.name} className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-neutral-500">
-            {pos.name} <span className="font-normal">(need {pos.limit})</span>
+      {groups.map((g) => (
+        <div key={g.title} className="mfl-card">
+          <h2 className="mfl-card__head">
+            {g.title}
+            {g.rule ? ` · Start ${range(g.rule.min, g.rule.max)}` : ""}
           </h2>
-          <PlayerList
-            players={playersByPosition.get(pos.name) ?? []}
-            selected={selected}
-            onToggle={toggle}
-          />
-        </section>
+          {g.players.length === 0 ? (
+            <p className="mfl-empty">No {g.title} on your roster.</p>
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {g.players.map((p) => {
+                const on = selected.has(p.id);
+                return (
+                  <li key={p.id}>
+                    <button type="button" className="mfl-pick" aria-pressed={on} onClick={() => toggle(p.id)}>
+                      <PositionBadge position={p.position} />
+                      <span className="mfl-player__main">
+                        <span className="mfl-player__name">
+                          <span>{p.name}</span>
+                          {p.badge && <span className={`mfl-badge mfl-badge--${p.badge.tone}`}>{p.badge.label}</span>}
+                        </span>
+                        <span className="mfl-player__sub" style={{ display: "block" }}>
+                          {p.sub}
+                          {p.proj ? ` · Proj. ${p.proj}` : ""}
+                        </span>
+                      </span>
+                      <span className="mfl-pick__box">
+                        <Icon name="check" small />
+                        <span className="mfl-sr">{on ? "Starting" : "Not starting"}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       ))}
 
-      {otherPlayers.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-neutral-500">Other</h2>
-          <PlayerList players={otherPlayers} selected={selected} onToggle={toggle} />
-        </section>
-      )}
-
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          className="rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 transition-colors"
-        >
-          {saving ? "Saving…" : `Save lineup for week ${week}`}
+      <div className="mfl-stack" style={{ gap: "var(--space-3)" }}>
+        <button type="button" className="mfl-btn mfl-btn--accent mfl-btn--block" onClick={save} disabled={!canSave}>
+          {saving ? "Saving" : `Save week ${week} lineup`}
         </button>
+        <p className="mfl-note" role="status" style={{ textAlign: "center" }}>
+          {problem ?? "Lineup ready"}
+        </p>
         {message && (
-          <span
-            className={`text-sm ${message.type === "success" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
-          >
+          <p role="status" className={`mfl-note${message.kind === "error" ? " mfl-note--error" : ""}`} style={{ textAlign: "center" }}>
             {message.text}
-          </span>
+          </p>
         )}
       </div>
-    </div>
-  );
-}
-
-function PlayerList({
-  players,
-  selected,
-  onToggle,
-}: {
-  players: RosterPlayer[];
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-}) {
-  if (players.length === 0) {
-    return <p className="text-sm text-neutral-400">No eligible players on your roster.</p>;
-  }
-  return (
-    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-      {players.map((p) => (
-        <label
-          key={p.id}
-          className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors ${
-            selected.has(p.id)
-              ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
-              : "border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900"
-          }`}
-        >
-          <input
-            type="checkbox"
-            checked={selected.has(p.id)}
-            onChange={() => onToggle(p.id)}
-            className="accent-blue-600"
-          />
-          <span>
-            {p.name}
-            {p.team && <span className="text-neutral-400"> ({p.team})</span>}
-          </span>
-        </label>
-      ))}
-    </div>
+    </>
   );
 }

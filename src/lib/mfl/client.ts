@@ -35,6 +35,22 @@ export async function mflLogin(
 }
 
 /**
+ * MFL error text can carry HTML (e.g. a link to "invalid roster") escaped as
+ * entities. Show people plain text.
+ */
+export function cleanMflMessage(message: string): string {
+  return message
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/<[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Parses an MFL export/import response body. Despite JSON=1, MFL sometimes
  * returns a plain XML `<error>...</error>` body anyway (e.g. auth failures) —
  * so fall back to scraping that out rather than letting JSON.parse blow up
@@ -52,13 +68,15 @@ async function parseMflResponse<T>(res: Response, label: string): Promise<T> {
       const err = data.error;
       const message =
         typeof err === "string" ? err : (err as { $t?: string }).$t ?? "MFL API error";
-      throw new MflApiError(message);
+      throw new MflApiError(cleanMflMessage(message));
     }
     return data as T;
   } catch (err) {
     if (err instanceof MflApiError) throw err;
     const errorMatch = text.match(/<error>([^<]*)<\/error>/i);
-    throw new MflApiError(errorMatch?.[1]?.trim() || `MFL ${label} returned an unexpected response`);
+    throw new MflApiError(
+      cleanMflMessage(errorMatch?.[1] ?? "") || `MFL ${label} returned an unexpected response`
+    );
   }
 }
 
