@@ -19,12 +19,8 @@ export default function LogoutButton() {
   }
 
   return (
-    <button
-      onClick={handleLogout}
-      disabled={loading}
-      className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors disabled:opacity-60"
-    >
-      {loading ? "Signing out…" : "Sign out"}
+    <button type="button" className="mfl-btn mfl-btn--block" onClick={handleLogout} disabled={loading}>
+      {loading ? "Signing out" : "Sign out"}
     </button>
   );
 }

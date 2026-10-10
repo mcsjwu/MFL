@@ -1,0 +1,107 @@
+/* MFL design tokens. Source of truth: the MFL design system's tokens.json.
+   Dark is the primary theme; light applies when the system asks for it. */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces and washes */
+  --canvas: #060a12;
+  --wash-navy: #0b2250;
+  --wash-green: #0e3319;
+  --wash-crimson: #3d101c;
+  --wash-violet: #281650;
+  --glass: #ffffff14;
+  --glass-raised: #ffffff24;
+  --glass-selected: #ffffff3d;
+  --stroke: #ffffff1f;
+  --stroke-strong: #ffffff70;
+
+  /* Text */
+  --ink: #ffffff;
+  --ink-muted: #b4c0d8;
+  --ink-subtle: #a0aec9;
+
+  /* Brand */
+  --accent: #66b0ff;
+  --on-accent: #04122b;
+  --accent-soft: #66b0ff1a;
+
+  /* Meaning */
+  --up: #4ade93;
+  --down: #ff8591;
+  --warn: #ffc247;
+  --live: #ff7f8d;
+
+  /* Positions */
+  --pos-qb: #ffa3b1;
+  --pos-rb: #6ae5c4;
+  --pos-wr: #8dc3ff;
+  --pos-te: #ffc247;
+  --pos-k: #c9b5ff;
+  --pos-def: #c3cee4;
+
+  /* Elevation */
+  --shadow-glass: inset 0 1px 0 0 #ffffff26, 0 16px 40px 0 #00000066;
+  --shadow-pop: 0 8px 24px 0 #00000080;
+  --blur-glass: 28px;
+
+  /* Spacing (4pt grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Radius */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+
+  /* Type families. Apple faces first, Nunito/Figtree (next/font) elsewhere. */
+  --font-display: ui-rounded, "SF Pro Rounded", var(--font-nunito), system-ui, sans-serif;
+  --font-sans: -apple-system, "SF Pro Text", var(--font-figtree), system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --canvas: #eef2f8;
+    --wash-navy: #d5e3fb;
+    --wash-green: #d3efda;
+    --wash-crimson: #f6d6dc;
+    --wash-violet: #e3d9f7;
+    --glass: #ffffffb8;
+    --glass-raised: #ffffffe6;
+    --glass-selected: #ffffff;
+    --stroke: #0a14261a;
+    --stroke-strong: #0a142680;
+
+    --ink: #0a1426;
+    --ink-muted: #44536f;
+    --ink-subtle: #5a6885;
+
+    --accent: #1958cc;
+    --on-accent: #ffffff;
+    --accent-soft: #1958cc1a;
+
+    --up: #087443;
+    --down: #c0283a;
+    --warn: #8a5600;
+    --live: #d01f30;
+
+    --pos-qb: #a81f3f;
+    --pos-rb: #09664f;
+    --pos-wr: #1450b8;
+    --pos-te: #7a4c00;
+    --pos-k: #5a30bd;
+    --pos-def: #3a4862;
+
+    --shadow-glass: inset 0 1px 0 0 #ffffffcc, 0 10px 30px 0 #0a14261f;
+    --shadow-pop: 0 8px 20px 0 #0a142633;
+  }
+}

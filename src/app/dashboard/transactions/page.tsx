@@ -1,118 +1,113 @@
-import type { ReactNode } from "react";
+import PageHeader from "@/components/mfl/PageHeader";
 import { resolvePlayers } from "@/lib/mfl/client";
-import { getFranchiseMap, getTransactions, MflTransaction } from "@/lib/mfl/queries";
+import { displayName, formatDate } from "@/lib/mfl/present";
+import { getFranchiseMap, getTransactions, type MflTransaction } from "@/lib/mfl/queries";
 import { getMflSessionCookie } from "@/lib/mfl/session";
 
-function splitIds(csv?: string): string[] {
-  return (csv ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const LIMIT = 40;
+
+type Trade = MflTransaction & {
+  franchise2?: string;
+  franchise1_gave_up?: string;
+  franchise2_gave_up?: string;
+};
+
+const splitIds = (csv?: string) => (csv ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const isDraftPick = (token: string) => token.startsWith("DP_") || token.startsWith("FP_");
+
+/**
+ * FREE_AGENT / WAIVER `transaction` is "ADDED_IDS,|DROPPED_IDS,"; BBID_WAIVER
+ * puts the bid in the middle: "ADDED_IDS,|BID|DROPPED_IDS,".
+ */
+function parseAddDrop(transaction?: string) {
+  const parts = (transaction ?? "").split("|");
+  const added = splitIds(parts[0]);
+  const bid = parts.length === 3 ? Number.parseFloat(parts[1]) : undefined;
+  const dropped = splitIds(parts[parts.length - 1] ?? "");
+  return { added, dropped, bid: bid !== undefined && Number.isFinite(bid) ? bid : undefined };
 }
 
-function isDraftPick(token: string): boolean {
-  return token.startsWith("DP_") || token.startsWith("FP_");
-}
-
-/** FREE_AGENT/WAIVER `transaction` field is "DROPPED_IDS,|ADDED_IDS,". */
-function parseAddDrop(transaction?: string): { dropped: string[]; added: string[] } {
-  const [dropped = "", added = ""] = (transaction ?? "").split("|");
-  return { dropped: splitIds(dropped), added: splitIds(added) };
-}
+const TYPE_LABELS: Record<string, string> = {
+  FREE_AGENT: "Free agent",
+  WAIVER: "Waiver",
+  BBID_WAIVER: "Blind bid",
+  TRADE: "Trade",
+  IR: "Injured reserve",
+  TAXI: "Taxi squad",
+};
+const typeLabel = (type: string) =>
+  TYPE_LABELS[type] ?? type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, " ");
 
 export default async function TransactionsPage() {
   const cookie = await getMflSessionCookie();
-  const [franchises, transactions] = await Promise.all([
-    getFranchiseMap({ cookie }),
-    getTransactions({ cookie }),
-  ]);
+  const [franchises, all] = await Promise.all([getFranchiseMap({ cookie }), getTransactions({ cookie })]);
 
-  const allPlayerIds = new Set<string>();
+  const transactions = all
+    .filter((tx) => tx.type !== "LOCK_ALL_PLAYERS" && tx.type !== "UNLOCK_ALL_PLAYERS")
+    .slice(0, LIMIT);
+
+  const ids = new Set<string>();
   for (const tx of transactions) {
     if (tx.type === "TRADE") {
-      const t = tx as MflTransaction & { franchise1_gave_up?: string; franchise2_gave_up?: string };
+      const t = tx as Trade;
       [...splitIds(t.franchise1_gave_up), ...splitIds(t.franchise2_gave_up)]
         .filter((id) => !isDraftPick(id))
-        .forEach((id) => allPlayerIds.add(id));
+        .forEach((id) => ids.add(id));
     } else {
       const { dropped, added } = parseAddDrop(tx.transaction);
-      [...dropped, ...added].forEach((id) => allPlayerIds.add(id));
+      [...dropped, ...added].forEach((id) => ids.add(id));
     }
-    splitIds(tx.activated).forEach((id) => allPlayerIds.add(id));
-    splitIds(tx.deactivated).forEach((id) => allPlayerIds.add(id));
+    splitIds(tx.activated).forEach((id) => ids.add(id));
+    splitIds(tx.deactivated).forEach((id) => ids.add(id));
   }
-  const players = await resolvePlayers([...allPlayerIds]);
-  const playerName = (id: string) => players.get(id)?.name ?? (isDraftPick(id) ? id : `Player #${id}`);
-
-  const visible = transactions.filter(
-    (tx) => tx.type !== "LOCK_ALL_PLAYERS" && tx.type !== "UNLOCK_ALL_PLAYERS"
-  );
+  const players = await resolvePlayers([...ids]);
+  const who = (id: string) => (isDraftPick(id) ? "a draft pick" : displayName(players.get(id)?.name, `Player #${id}`));
+  const list = (csv?: string) => splitIds(csv).map(who).join(", ");
+  const team = (id?: string) => franchises.get(id ?? "")?.name?.trim() ?? id ?? "";
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Transactions</h1>
-
-      <div className="flex flex-col gap-3">
-        {visible.map((tx, i) => {
-          const date = new Date(parseInt(tx.timestamp, 10) * 1000).toLocaleString();
-          const team = franchises.get(tx.franchise)?.name ?? tx.franchise;
-
-          let body: ReactNode;
-          if (tx.type === "TRADE") {
-            const t = tx as MflTransaction & {
-              franchise2?: string;
-              franchise1_gave_up?: string;
-              franchise2_gave_up?: string;
-            };
-            const team2 = franchises.get(t.franchise2 ?? "")?.name ?? t.franchise2;
-            body = (
-              <div className="flex flex-col gap-1">
-                <span>
-                  <strong>{team}</strong> traded away{" "}
-                  {splitIds(t.franchise1_gave_up).map(playerName).join(", ") || "nothing"}
-                </span>
-                <span>
-                  <strong>{team2}</strong> traded away{" "}
-                  {splitIds(t.franchise2_gave_up).map(playerName).join(", ") || "nothing"}
-                </span>
-              </div>
-            );
-          } else if (tx.type === "IR") {
-            body = (
-              <span>
-                <strong>{team}</strong>
-                {splitIds(tx.activated).length > 0 &&
-                  ` activated ${splitIds(tx.activated).map(playerName).join(", ")}`}
-                {splitIds(tx.deactivated).length > 0 &&
-                  ` placed ${splitIds(tx.deactivated).map(playerName).join(", ")} on IR`}
-              </span>
-            );
-          } else {
-            const { dropped, added } = parseAddDrop(tx.transaction);
-            body = (
-              <span>
-                <strong>{team}</strong>
-                {added.length > 0 && ` added ${added.map(playerName).join(", ")}`}
-                {added.length > 0 && dropped.length > 0 && "; "}
-                {dropped.length > 0 && ` dropped ${dropped.map(playerName).join(", ")}`}
-              </span>
-            );
-          }
-
-          return (
-            <div
-              key={i}
-              className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 flex flex-col gap-1"
-            >
-              <div className="flex items-center justify-between text-xs text-neutral-500">
-                <span className="uppercase tracking-wide">{tx.type.replace(/_/g, " ")}</span>
-                <span>{date}</span>
-              </div>
-              <div className="text-sm">{body}</div>
-            </div>
-          );
-        })}
-        {visible.length === 0 && (
-          <p className="text-sm text-neutral-500">No transactions yet.</p>
+    <>
+      <PageHeader title="Transactions" />
+      <div className="mfl-card">
+        {transactions.length === 0 ? (
+          <p className="mfl-empty">No transactions yet.</p>
+        ) : (
+          <ul className="mfl-rows">
+            {transactions.map((tx, i) => {
+              const lines: string[] = [];
+              let title = team(tx.franchise);
+              if (tx.type === "TRADE") {
+                const t = tx as Trade;
+                title = `${team(t.franchise)} and ${team(t.franchise2)}`;
+                lines.push(`${team(t.franchise)} sent ${list(t.franchise1_gave_up) || "nothing"}`);
+                lines.push(`${team(t.franchise2)} sent ${list(t.franchise2_gave_up) || "nothing"}`);
+              } else if (tx.type === "IR") {
+                if (splitIds(tx.deactivated).length) lines.push(`Placed on IR: ${list(tx.deactivated)}`);
+                if (splitIds(tx.activated).length) lines.push(`Activated: ${list(tx.activated)}`);
+              } else {
+                const { dropped, added, bid } = parseAddDrop(tx.transaction);
+                if (added.length) lines.push(`Added ${added.map(who).join(", ")}${bid !== undefined ? ` for $${bid}` : ""}`);
+                if (dropped.length) lines.push(`Dropped ${dropped.map(who).join(", ")}`);
+              }
+              return (
+                <li key={i} className="mfl-row" style={{ alignItems: "flex-start" }}>
+                  <span className="mfl-row__main">
+                    <span className="mfl-eyebrow">{typeLabel(tx.type)}</span>
+                    <span className="mfl-row__title">{title}</span>
+                    {lines.map((line) => (
+                      <span key={line} className="mfl-row__sub">
+                        {line}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="mfl-row__end mfl-caption">{formatDate(tx.timestamp)}</span>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
-    </div>
+      {all.length > LIMIT && <p className="mfl-caption" style={{ textAlign: "center", margin: 0 }}>Showing the latest {LIMIT} moves.</p>}
+    </>
   );
 }

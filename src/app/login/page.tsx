@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { isLoggedIn } from "@/lib/mfl/session";
-import { MFL_LEAGUE_ID } from "@/lib/mfl/config";
+import Monogram from "@/components/mfl/Monogram";
 import { getLeagueName } from "@/lib/mfl/queries";
+import { isLoggedIn } from "@/lib/mfl/session";
 import LoginForm from "./LoginForm";
 
 export default async function LoginPage() {
@@ -9,17 +9,20 @@ export default async function LoginPage() {
     redirect("/dashboard");
   }
 
-  const leagueName = await getLeagueName();
+  const leagueName = (await getLeagueName()) ?? "MyFantasyLeague";
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-8 px-4">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-semibold">{leagueName ?? "MyFantasyLeague"}</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          MyFantasyLeague app &middot; League #{MFL_LEAGUE_ID}
-        </p>
+    <main className="mfl-screen">
+      <div className="mfl-shell mfl-login">
+        <header className="mfl-pagehead" style={{ alignItems: "flex-start", gap: "var(--space-4)" }}>
+          <Monogram name={leagueName} />
+          <h1 className="mfl-large-title">{leagueName}</h1>
+          <p className="mfl-callout" style={{ margin: 0 }}>
+            Sign in with your MyFantasyLeague login.
+          </p>
+        </header>
+        <LoginForm />
       </div>
-      <LoginForm />
     </main>
   );
 }

@@ -1,62 +1,72 @@
+import Monogram from "@/components/mfl/Monogram";
+import PageHeader from "@/components/mfl/PageHeader";
+import { MFL_LEAGUE_ID, MFL_YEAR } from "@/lib/mfl/config";
+import { DASH } from "@/lib/mfl/present";
 import { getLeague } from "@/lib/mfl/queries";
 import { getMflSessionCookie } from "@/lib/mfl/session";
-import { MFL_LEAGUE_ID, MFL_YEAR } from "@/lib/mfl/config";
+
+const range = (limit: string) => limit.replace("-", "–");
 
 export default async function LeagueInfoPage() {
   const cookie = await getMflSessionCookie();
   const league = await getLeague({ cookie });
 
+  const tiles = [
+    { label: "Roster size", value: league?.rosterSize },
+    { label: "Starters", value: league?.starterCount },
+    { label: "First week", value: league?.startWeek },
+    { label: "Last regular week", value: league?.lastRegularSeasonWeek },
+  ];
+
   return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-semibold">{league?.name ?? "League Info"}</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          League #{MFL_LEAGUE_ID} &middot; {MFL_YEAR} season
-        </p>
+    <>
+      <PageHeader title="League info" sub={`${league?.name ?? "League"} · ${MFL_YEAR} · #${MFL_LEAGUE_ID}`} />
+
+      <div className="mfl-card">
+        <h2 className="mfl-card__head">Settings</h2>
+        <ul className="mfl-tiles" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {tiles.map((t) => (
+            <li key={t.label} className="mfl-tile">
+              <span className="mfl-eyebrow">{t.label}</span>
+              <span className="mfl-stat">{t.value ?? DASH}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-        {[
-          { label: "Roster Size", value: league?.rosterSize },
-          { label: "Start Week", value: league?.startWeek },
-          { label: "End Week", value: league?.endWeek },
-          { label: "Last Regular Season Week", value: league?.lastRegularSeasonWeek },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4"
-          >
-            <p className="text-xs uppercase tracking-wide text-neutral-500">{stat.label}</p>
-            <p className="text-xl font-semibold">{stat.value ?? "-"}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Franchises</h2>
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-          {(league?.franchises ?? []).map((f) => (
-            <div
-              key={f.id}
-              className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 flex items-center gap-3"
-            >
-              {f.icon ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={f.icon} alt="" className="h-10 w-10 rounded object-cover" />
-              ) : (
-                <div className="h-10 w-10 rounded bg-neutral-200 dark:bg-neutral-800" />
-              )}
-              <div>
-                <p className="text-sm font-medium">{f.name}</p>
-                {f.abbrev && <p className="text-xs text-neutral-500">{f.abbrev}</p>}
-              </div>
-            </div>
-          ))}
+      {(league?.starterPositions.length ?? 0) > 0 && (
+        <div className="mfl-card">
+          <h2 className="mfl-card__head">Starting lineup</h2>
+          <ul className="mfl-rows">
+            {league?.starterPositions.map((p) => (
+              <li key={p.name} className="mfl-row">
+                <span className="mfl-row__main">
+                  <span className="mfl-row__title">{p.name}</span>
+                </span>
+                <span className="mfl-row__end mfl-stat">{range(p.limit)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-        {(!league || league.franchises.length === 0) && (
-          <p className="text-sm text-neutral-500">No franchises found.</p>
+      )}
+
+      <div className="mfl-card">
+        <h2 className="mfl-card__head">Teams</h2>
+        {(league?.franchises.length ?? 0) === 0 ? (
+          <p className="mfl-empty">No teams found.</p>
+        ) : (
+          <ul className="mfl-rows">
+            {league?.franchises.map((f) => (
+              <li key={f.id} className="mfl-row">
+                <Monogram name={f.name} small />
+                <span className="mfl-row__main">
+                  <span className="mfl-row__title">{f.name.trim()}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
-      </section>
-    </div>
+      </div>
+    </>
   );
 }

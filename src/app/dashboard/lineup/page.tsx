@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { resolvePlayers } from "@/lib/mfl/client";
-import { getFranchiseRoster, getLeague } from "@/lib/mfl/queries";
+import ChipRow from "@/components/mfl/ChipRow";
+import PageHeader from "@/components/mfl/PageHeader";
+import { getCurrentWeek, getFranchiseMap, getLeague } from "@/lib/mfl/queries";
+import { getLineupView } from "@/lib/mfl/roster";
 import { getMflSessionCookie, getMyFranchiseId } from "@/lib/mfl/session";
 import LineupEditor from "./LineupEditor";
 
@@ -11,80 +13,70 @@ export default async function LineupPage({
 }: {
   searchParams: Promise<{ week?: string }>;
 }) {
-  const { week: weekParam } = await searchParams;
-  const week = Math.min(Math.max(parseInt(weekParam ?? "1", 10) || 1, 1), 18);
-
   const cookie = await getMflSessionCookie();
   const franchiseId = await getMyFranchiseId();
 
   if (!franchiseId) {
     return (
-      <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold">Set Lineup</h1>
-        <p className="text-sm text-neutral-500">
-          We couldn&apos;t automatically detect your franchise in this league, so we don&apos;t
-          know which roster to edit. Try signing out and back in.
-        </p>
-      </div>
+      <>
+        <PageHeader title="Set lineup" />
+        <div className="mfl-card">
+          <p className="mfl-empty">
+            We couldn&apos;t tell which team is yours in this league, so there&apos;s no roster to edit. Sign
+            out and back in with the login that manages your team.
+          </p>
+        </div>
+      </>
     );
   }
 
-  const [league, roster] = await Promise.all([
+  const { week: weekParam } = await searchParams;
+  const current = await getCurrentWeek({ cookie });
+  const requested = parseInt(weekParam ?? "", 10);
+  const week = Math.min(Math.max(Number.isFinite(requested) ? requested : current, 1), 18);
+
+  const [league, franchises, view] = await Promise.all([
     getLeague({ cookie }),
-    getFranchiseRoster(franchiseId, { cookie, week }),
+    getFranchiseMap({ cookie }),
+    getLineupView({ franchiseId, week, cookie }),
   ]);
 
-  const players = roster ? await resolvePlayers(roster.player.map((p) => p.id)) : new Map();
-  const rosterPlayers = (roster?.player ?? []).map((p) => {
-    const info = players.get(p.id);
-    return {
-      id: p.id,
-      name: info?.name ?? `Player #${p.id}`,
-      position: info?.position ?? "UNK",
-      team: info?.team ?? "",
-    };
-  });
-  const initialStarters = (roster?.player ?? [])
-    .filter((p) => p.status?.toUpperCase() === "STARTER")
-    .map((p) => p.id);
-
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Set Lineup</h1>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            {league?.franchises.find((f) => f.id === franchiseId)?.name ?? "My Team"}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {WEEKS.map((w) => (
-            <Link
-              key={w}
-              href={`/dashboard/lineup?week=${w}`}
-              className={`rounded px-2 py-1 text-xs font-medium ${
-                w === week
-                  ? "bg-blue-600 text-white"
-                  : "bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-800"
-              }`}
-            >
-              {w}
-            </Link>
-          ))}
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Set lineup"
+        sub={`${franchises.get(franchiseId)?.name?.trim() ?? "My team"} · Week ${week}`}
+      />
 
-      {rosterPlayers.length === 0 ? (
-        <p className="text-sm text-neutral-500">No roster data available for this week.</p>
+      <ChipRow label="Week">
+        {WEEKS.map((w) => (
+          <Link
+            key={w}
+            href={`/dashboard/lineup?week=${w}`}
+            className="mfl-btn mfl-btn--sm"
+            aria-label={`Week ${w}`}
+            aria-current={w === week ? "true" : undefined}
+          >
+            {w}
+          </Link>
+        ))}
+      </ChipRow>
+
+      {view.players.length === 0 ? (
+        <div className="mfl-card">
+          <p className="mfl-empty">No roster data available for this week.</p>
+        </div>
       ) : (
         <LineupEditor
+          // Remount when the week changes so the selection resets to that week's lineup.
+          key={week}
           week={week}
-          players={rosterPlayers}
+          players={view.players}
           starterCount={league?.starterCount}
           starterPositions={league?.starterPositions ?? []}
-          initialStarters={initialStarters}
+          initialStarters={view.initialStarters}
         />
       )}
-    </div>
+    </>
   );
 }

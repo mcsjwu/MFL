@@ -125,6 +125,9 @@ export async function getWeeklyResults(week: number, opts: WithCookie = {}): Pro
 export interface MflLiveScoreFranchise {
   id: string;
   score?: string;
+  gameSecondsRemaining?: string;
+  playersYetToPlay?: string;
+  playersCurrentlyPlaying?: string;
 }
 
 export async function getLiveScoring(
@@ -149,6 +152,24 @@ export async function getLiveScoring(
 export interface MflScheduleWeek {
   week: string;
   matchup: MflMatchup[];
+}
+
+/**
+ * The NFL week MFL considers current (1-18). Falls back to the league's start
+ * week, then 1, if the schedule can't be read.
+ */
+export async function getCurrentWeek(opts: WithCookie = {}): Promise<number> {
+  try {
+    const data = await mflExport<{ nflSchedule?: { week?: string } }>("nflSchedule", {
+      cookie: opts.cookie,
+      skipLeague: true,
+    });
+    const week = parseInt(data.nflSchedule?.week ?? "", 10);
+    if (Number.isFinite(week)) return Math.min(Math.max(week, 1), 18);
+  } catch {
+    // fall through
+  }
+  return 1;
 }
 
 export async function getSchedule(opts: WithCookie = {}): Promise<MflScheduleWeek[]> {
@@ -244,4 +265,85 @@ export async function getTransactions(opts: WithCookie = {}): Promise<MflTransac
   } catch {
     return [];
   }
+}
+
+interface MflScoreRow {
+  id: string;
+  score?: string;
+}
+
+async function getScoreMap(
+  type: "playerScores" | "projectedScores",
+  week: number,
+  opts: WithCookie
+): Promise<Map<string, string>> {
+  try {
+    const data = await mflExport<{
+      playerScores?: { playerScore?: MflScoreRow | MflScoreRow[] };
+      projectedScores?: { playerScore?: MflScoreRow | MflScoreRow[] };
+    }>(type, { params: { W: week }, cookie: opts.cookie });
+    const rows = toArray(data[type]?.playerScore);
+    return new Map(rows.filter((r) => r.score !== undefined).map((r) => [r.id, r.score as string]));
+  } catch {
+    return new Map();
+  }
+}
+
+/** Fantasy points scored so far this week, by player id. */
+export function getPlayerScores(week: number, opts: WithCookie = {}) {
+  return getScoreMap("playerScores", week, opts);
+}
+
+/** Projected fantasy points for the week, by player id. */
+export function getProjectedScores(week: number, opts: WithCookie = {}) {
+  return getScoreMap("projectedScores", week, opts);
+}
+
+/** NFL injury designations for the week, by player id (e.g. "Questionable", "Out", "IR"). */
+export async function getInjuries(week: number, opts: WithCookie = {}): Promise<Map<string, string>> {
+  try {
+    const data = await mflExport<{
+      injuries?: { injury?: { id: string; status: string } | { id: string; status: string }[] };
+    }>("injuries", { params: { W: week }, cookie: opts.cookie, skipLeague: true });
+    return new Map(toArray(data.injuries?.injury).map((i) => [i.id, i.status]));
+  } catch {
+    return new Map();
+  }
+}
+
+export interface MflNflGame {
+  opponent: string;
+  isHome: boolean;
+  /** Unix seconds. */
+  kickoff: number;
+  gameSecondsRemaining: number;
+}
+
+/** This week's NFL games keyed by team code (MFL's codes, e.g. "KCC"). A team with no entry is on a bye. */
+export async function getNflGames(week: number, opts: WithCookie = {}): Promise<Map<string, MflNflGame>> {
+  type Team = { id: string; isHome?: string };
+  type Game = { kickoff?: string; gameSecondsRemaining?: string; team?: Team | Team[] };
+  const games = new Map<string, MflNflGame>();
+  try {
+    const data = await mflExport<{ nflSchedule?: { matchup?: Game | Game[] } }>("nflSchedule", {
+      params: { W: week },
+      cookie: opts.cookie,
+      skipLeague: true,
+    });
+    for (const game of toArray(data.nflSchedule?.matchup)) {
+      const teams = toArray(game.team);
+      if (teams.length !== 2) continue;
+      for (const [me, other] of [[teams[0], teams[1]], [teams[1], teams[0]]] as const) {
+        games.set(me.id, {
+          opponent: other.id,
+          isHome: me.isHome === "1",
+          kickoff: parseInt(game.kickoff ?? "0", 10),
+          gameSecondsRemaining: parseInt(game.gameSecondsRemaining ?? "0", 10),
+        });
+      }
+    }
+  } catch {
+    // no schedule: rows simply omit the matchup line
+  }
+  return games;
 }
